@@ -15,15 +15,21 @@ from pyspark.sql import SparkSession
 sc = SparkContext()
 spark = SparkSession.builder.getOrCreate()
 
-
-
-
+""" Make a dictionnary of feature by class
+Each classe key contains the list of their features
+"""
 def load_features(directorie):
     classe_feature = {}
+    features = []
     for file in os.listdir(directorie):
+        #Extract class from filename wich is the dictionnarie key
         current_class = re.sub(r'[0-9]', '', file)[:-9].strip('_')
-        features = classe_feature.pop(current_class, [])
+        #retrieve current list if exist
+        if current_class in classe_feature:
+            features = [classe_feature.pop(current_class)]
+        #add current feature to the class features list 
         features.append(json.load(open(directorie+"/"+file)))
+        #update dictionnarie key
         classe_feature.update({current_class.title() : features})
     return classe_feature
 
@@ -43,7 +49,7 @@ def main():
         lg.warning(no_directorie)
     else:
         classe_feature = load_features(directorie)
-        print(classe_feature.keys())
+
     finally:
         lg.info('#################### Analysis is over ######################')
     
