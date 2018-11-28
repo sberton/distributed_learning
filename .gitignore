@@ -5,3 +5,5 @@ local/
 images/
 extract-features.py
 features/
+result.json
+print_result.py
