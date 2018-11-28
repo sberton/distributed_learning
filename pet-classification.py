@@ -166,7 +166,6 @@ def choose_random_classes_v2(directorie, classification_type):
 def main():
     args = parse_arguments()
     result = []
-    result_log = []
     if args.verbose:
         lg.basicConfig(level=lg.INFO)
     try:
@@ -181,7 +180,7 @@ def main():
     else:  
         lg.info('#################### Starting pet-classification ######################')
         lg.info('Choosing %s classification', classification_type)
-        step = 0
+        step = 1
         label_indexer = StringIndexer(inputCol="label", outputCol="label_index") 
         class1, class2 = choose_random_classes(directorie, classification_type)
         class_feature = load_features(directorie, class1, class2)
@@ -189,7 +188,7 @@ def main():
         for split_percent in split_percent_list:
             for iteration_model in iteration_model_list:
                 
-                lg.info('#################### Starting step %s ####################', step+1)
+                lg.info('#################### Starting step %s ####################', step)
                 lg.info('Random split is %s', split_percent)
                 lg.info('Number of iterations model is %s', iteration_model)
                 
@@ -220,14 +219,12 @@ def main():
                                                  / float(predictions.count())
 
                 lg.info('Test Error ================>%s', str(train_error))
-                lg.info('##################### Ending step %s #####################', step+1)
+                lg.info('##################### Ending step %s #####################', step)
                 step += 1
-                result_log.append([iteration_model,split_percent,train_error])
                 result.append({"step" : step, "class1" : class1, "class2" : class2,
                                "iteration_model" : iteration_model, 
                                "split_percent" : split_percent, "error" :  train_error})
 
-        print(result_log)
         with open('result.json', 'w') as result_file:
             json.dump(result, result_file)
     finally:
