@@ -1,0 +1,6 @@
+[{"class1": "havanese", "class2": "german_shorthaired", "iteration_model": 25, "nb_training_data": 100, 
+"total_duration": 851.5287308692932, "training_duration": 525.4462373256683, "prediction_duration": 326.0824935436249, 
+"error": 0.04}, 
+{"class1": "havanese", "class2": "german_shorthaired", "iteration_model": 25, "nb_training_data": 110, 
+"total_duration": 863.7950718402863, "training_duration": 535.0771055221558, "prediction_duration": 328.7179663181305, 
+"error": 0.044444444444444446}]

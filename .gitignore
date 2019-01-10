@@ -3,10 +3,11 @@ bin/
 include/
 local/
 images/
-extract-features.py
 features/
 features_old/
 features_test/
 result.json
-print_result.py
 models/
+spark-warehouse/
+resutlat/
+resultat_1v1/

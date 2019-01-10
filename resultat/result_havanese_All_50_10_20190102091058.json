@@ -1,0 +1,52 @@
+[
+  {
+    "class2": "All",
+    "training_duration": 257.3778009414673,
+    "class1": "havanese",
+    "total_duration": 342.99688601493835,
+    "nb_training_data": 10,
+    "prediction_duration": 85.61908507347107,
+    "error": 0.0269694819020582,
+    "iteration_model": 10
+  },
+  {
+    "class2": "All",
+    "training_duration": 234.0322880744934,
+    "class1": "havanese",
+    "total_duration": 320.88393783569336,
+    "nb_training_data": 20,
+    "prediction_duration": 86.85164976119995,
+    "error": 0.02684964200477327,
+    "iteration_model": 10
+  },
+  {
+    "class2": "All",
+    "training_duration": 236.51667094230652,
+    "class1": "havanese",
+    "total_duration": 323.25472378730774,
+    "nb_training_data": 30,
+    "prediction_duration": 86.73805284500122,
+    "error": 0.026759011490634345,
+    "iteration_model": 10
+  },
+  {
+    "class2": "All",
+    "training_duration": 256.2269253730774,
+    "class1": "havanese",
+    "total_duration": 341.6110942363739,
+    "nb_training_data": 40,
+    "prediction_duration": 85.38416886329651,
+    "error": 0.026657780739753417,
+    "iteration_model": 10
+  },
+  {
+    "class2": "All",
+    "training_duration": 3.5329012870788574,
+    "class1": "havanese",
+    "total_duration": 150.1843547821045,
+    "nb_training_data": 50,
+    "prediction_duration": 146.65145349502563,
+    "error": 0.02657689581856839,
+    "iteration_model": 10
+  }
+]

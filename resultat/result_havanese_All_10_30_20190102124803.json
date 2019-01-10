@@ -1,0 +1,12 @@
+[
+  {
+    "class2": "All",
+    "training_duration": 430.6565945148468,
+    "class1": "havanese",
+    "total_duration": 519.2201917171478,
+    "nb_training_data": 10,
+    "prediction_duration": 88.56359720230103,
+    "error": 0.0269694819020582,
+    "iteration_model": 30
+  }
+]

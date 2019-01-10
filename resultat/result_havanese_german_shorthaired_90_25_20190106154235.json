@@ -1,0 +1,12 @@
+[{"class1": "havanese", "class2": "german_shorthaired", "iteration_model": 25, "nb_training_data": 60, 
+"total_duration": 748.4196610450745, "training_duration": 476.9476659297943, "prediction_duration": 271.47199511528015, 
+"error": 0.025}, 
+{"class1": "havanese", "class2": "german_shorthaired", "iteration_model": 25, "nb_training_data": 70, 
+"total_duration": 783.0000340938568, "training_duration": 501.9683005809784, "prediction_duration": 281.0317335128784, 
+"error": 0.03076923076923077}, 
+{"class1": "havanese", "class2": "german_shorthaired", "iteration_model": 25, "nb_training_data": 80, 
+"total_duration": 837.0800018310547, "training_duration": 515.3877456188202, "prediction_duration": 321.6922562122345, 
+"error": 0.03333333333333333}, 
+{"class1": "havanese", "class2": "german_shorthaired", "iteration_model": 25, "nb_training_data": 90, 
+"total_duration": 867.5781896114349, "training_duration": 540.3131775856018, "prediction_duration": 327.26501202583313, 
+"error": 0.03636363636363636}]
