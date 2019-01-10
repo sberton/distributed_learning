@@ -2,24 +2,23 @@
 # coding: utf-8
 
 import argparse
-import re
-import os
 import logging as lg
 import json
-import matplotlib.pyplot as plt
-from random import randint
+import os.path
+import time
+import boto3
+import boto.s3, boto.s3.key
 from pyspark.sql import Row
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
-from pyspark.mllib.classification import SVMWithSGD
+from pyspark.mllib.classification import SVMWithSGD, SVMModel
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.ml.feature import StringIndexer
 
 """
-Use with PYSPARK_PYTHON=python3 ../test/code/spark-2.3.1-bin-hadoop2.7/bin/spark-submit 
-./pet-classification.py -d features -c 1vsAll -r 0.9 0.8 0.7 0.6 0.5 0.4 0.3 0.2 0.1 -i 30 50 70 100 150 -v
+Use with 
+PYSPARK_PYTHON=python3 ../test/code/spark-2.3.1-bin-hadoop2.7/bin/spark-submit ./pet-classification-spark.py -d features -c1 keeshond -i 100
 """
-sc = SparkContext()
+sc = SparkContext(appName="pet-classification")
 spark = SparkSession.builder.getOrCreate()
 
 
@@ -28,208 +27,127 @@ def parse_arguments():
     Parsing argument with argparse module
     """
     parser = argparse.ArgumentParser(description='Process pet classification...', 
-                                     prog='pet-classification.py')
-    parser.add_argument("-d", "--directorie", help="""datasets directorie""", 
+                                     prog='pet-classification-spark.py')
+    parser.add_argument("-d", "--directory", help="""datasets features directory""", 
                         required=True)
     parser.add_argument("-v", "--verbose", action='store_true', 
                         help="""Make the application talk!""", required=False)
-    parser.add_argument("-r", "--random_split", default=0.1, nargs='+', 
-                        help="""random split percent""", type=float, required=False)
-    parser.add_argument("-c", "--classification_type", 
-                        help="""1vs1 or 1vsAll""", choices=['1vs1', '1vsAll'],
-                        required=True)
+    parser.add_argument("-f", "--force", action='store_true', 
+                        help="""Forcing training model""", required=False)
+    parser.add_argument("-n", "--nb_training_data", default=100,  
+                        help="""number of training data""", type=int, required=False)
     parser.add_argument("-i", "--iteration_model", 
                         help="""Number of iteration for SVMWithSGD training model""", 
                         required=False,
-                        nargs='*',
                         default=100,
                         type=int
                         )
+    parser.add_argument("-p", "--min_partition", 
+                        help="""Number of partition for rdd""", 
+                        required=False,
+                        default=4,
+                        type=int
+                        )
+    parser.add_argument("-c1", "--class1", 
+                        help="""Abyssinian, Bulldog...""",
+                        required=True)
+    parser.add_argument("-c2", "--class2", 
+                        help="""Abyssinian, Bulldog... All if missing""",
+                        required=False,
+                        default='All')
     return parser.parse_args()
 
-def extract_class(filename):
-    """
-    Extracting classname based on filename 
-    input : german_shorthaired_59.jpg.json
-    output : German_Shorthaired
-    """
-    return re.sub(r'[0-9]', '', filename.split('/')[-1])[:-9].strip('_').title()
-
-def load_features(directorie, class1, class2):
-    """ 
-    Make a dictionnary of features by class
-    Each classe key contains the list of their features
-    """
-    classes_features = []
-    features = []
-    for filename in os.listdir(directorie):
-        #Extract class from filename wich is the dictionnarie key
-        current_class = extract_class(filename)
-        if current_class in (class1, class2):
-            #features = json.load(open(directorie+"/"+filename, "r"))
-            features = [float(feature) for feature in json.load(open(directorie+"/"+filename, "r"))]
-            features.insert(0, current_class)
-            #update classe list
-            classes_features.append(features)
-        if class2 == "All" and current_class != class1:
-            features = [float(feature) for feature in json.load(open(directorie+"/"+filename, "r"))]
-            features.insert(0, "All")
-            #update classe list
-            classes_features.append(features)
-    lg.info('%s features availables', len(classes_features))
-    return classes_features
-
-def split_data(classe_features, nb_classes_features):
-    """
-    splitting data into 2 lists of features lists
-    For each features lists, first element is classe and others are features
-    deprecated : replaced by pyspark randomSplit 
-    """
-    classe_feature_training = []
-    classe_feature_test = []
-    classe_counter = {}
-    for classe_feature in classe_features:
-        classe = classe_feature[0]
-        if classe not in classe_counter:
-            classe_counter[classe] = 0
-        index = classe_counter[classe]
-        if index < nb_classes_features:
-            classe_feature_training.append(classe_feature)
-        else:
-            classe_feature_test.append(classe_feature)
-        classe_counter[classe] += 1
-    try:
-        #empty sequences are false
-        if not classe_feature_test: 
-            raise Exception('No test data')
-    except IndexError as no_test_data:
-        lg.error(no_test_data)        
-    return classe_feature_training, classe_feature_test
-
-def load_dataframe(classe_feature_list, class1, class2):
-    """
-    Create a dataframe with param list and filter
-    keep class 1 and class 2
-    """
-    rdd = sc.parallelize(classe_feature_list,4)\
-            .filter(lambda feature_list: (feature_list[0] == class1 or feature_list[0] == class2))\
-            .map(lambda feature_list: Row(label=feature_list[0],
-                                          features=feature_list[1:]))
-    return spark.createDataFrame(rdd)
-
-def create_labeledpoint(dataframe):
-    """
-    Create a labeledPoint with dataframe passed in parameter
-    Datalabeledpoint needs numeric index row
-    """
-    datalabeledpoint = dataframe.rdd.map(lambda row: LabeledPoint(row.label_index, row.features))
-    return datalabeledpoint
-
-def choose_random_classes(directorie, classification_type):
-    """
-    return 2 classes based on features present in feature's directorie
-    classe2 depends on classification type
-    """
-    classes_list = []
-    for filename in os.listdir(directorie):
-        current_class = extract_class(filename)
-        if current_class not in classes_list:
-            classes_list.append(current_class)
-    class1 = classes_list.pop(randint(0, len(classes_list)-1))
-    class2 = 'All'
-    if classification_type == '1vs1':
-        class2 = classes_list.pop(randint(0, len(classes_list)-1))
-    lg.info('Class 1 is %s', class1)
-    lg.info('Class 2 is %s', class2)
-    return class1, class2    
-    
-def choose_random_classes_v2(directorie, classification_type):
-    """
-    wholeTextFiles preserves the relation between data 
-    and the files that contained it, by loading the data 
-    into a PairRDD with one record per input file. 
-    The record will have the form (fileName, fileContent)
-    """
-    classes_list = sc.wholeTextFiles(path=directorie, minPartitions=4)\
-                    .map(lambda file: file[0])\
-                    .map(extract_class)\
-                    .distinct()\
-                    .collect()
-    class1 = classes_list.pop(randint(0, len(classes_list)-1))
-    class2 = 'All'
-    if classification_type == '1vs1':
-        class2 = classes_list.pop(randint(0, len(classes_list)-1))
-    lg.info('Class 1 is %s', class1)
-    lg.info('Class 2 is %s', class2)
-    return class1, class2
-
 def main():
+    #retrieve argument
     args = parse_arguments()
-    result = []
+    main_directory = args.directory
+    class1 = args.class1
+    class2 = args.class2
+    force_by_user = args.force
     if args.verbose:
         lg.basicConfig(level=lg.INFO)
-    try:
-        directorie = args.directorie
-        classification_type = args.classification_type
-        split_percent_list = args.random_split
-        iteration_model_list = args.iteration_model
-        if not os.path.exists(directorie):
-            raise FileNotFoundError('directorie {} does not exist'.format(directorie))
-    except FileNotFoundError as no_directorie:
-        lg.critical(no_directorie)
-    else:  
-        lg.info('#################### Starting pet-classification ######################')
-        lg.info('Choosing %s classification', classification_type)
-        step = 1
-        label_indexer = StringIndexer(inputCol="label", outputCol="label_index") 
-        class1, class2 = choose_random_classes(directorie, classification_type)
-        class_feature = load_features(directorie, class1, class2)
-        datatrain = load_dataframe(class_feature, class1, class2)
-        for split_percent in split_percent_list:
-            for iteration_model in iteration_model_list:
-                
-                lg.info('#################### Starting step %s ####################', step)
-                lg.info('Random split is %s', split_percent)
-                lg.info('Number of iterations model is %s', iteration_model)
-                
-                # class_feature.clear()
-                
-                #split dataframe into training datas and testing datas
-                (training_data, test_data) = datatrain.randomSplit([1-split_percent, split_percent])
-                # training_data.persist()
-                # test_data.persist()
+        
+    #Variables declaration
+    result = []
+    directory_feature = os.path.join(main_directory, "features", "*.json") 
+    nb_training_data = args.nb_training_data
+    iteration_model = args.iteration_model
+    min_partition = args.min_partition
+    s3 = boto3.resource('s3')
+    bucket = s3.Bucket('oc-calculdistribues-sberton')
+    result_file = class1+'_'+class2+'_'+time.strftime("%Y%m%d%H%M%S")+'.json'
+    model_file = 'model_'+class1+'_'+class2+'_'+str(nb_training_data)+'_'+str(iteration_model)
+    model_pathname = os.path.join(main_directory, "models", model_file) 
+    
+    #Searching existing model and store existence in is_model boolean
+    key = 'distributed_learning/models/'+model_file
+    objs = list(bucket.objects.filter(Prefix=key))
+    is_model = len(objs) > 0 and objs[0].key.startswith(key+'/')
+    
+    start_time = time.time()
+    lg.info('#################### Starting pet-classification ######################')
+    lg.info('Class 1 is %s', class1)
+    lg.info('Class 2 is %s', class2)
+    lg.info('Number of training datas is %s', nb_training_data)
+    lg.info('Number of iterations model is %s', iteration_model)
+    
+    #persist a common rdd which is using by both training and testing datas
+    common_rdd = sc.textFile(directory_feature, minPartitions=min_partition)\
+                   .filter(lambda line: line.split(', ')[0] in (class1, class2) or class2 == 'All')\
+                   .persist()    
+    
+    #Loading model if exists
+    if is_model and not force_by_user:
+        model = SVMModel.load(sc, model_pathname)
+        lg.info('Found and load recorded model %s', model_file)
+    else: 
+        lg.info('No recorded model found')
+        #create training rdd and train model if no model found or force
+        train_data_rdd = common_rdd.filter(lambda line: int(line.split(',')[1]) <= nb_training_data)\
+                                   .map(lambda line: Row(label=0.0, features=line.split(', ')[2:]) 
+                                        if line.split(', ')[0] == class1 
+                                        else Row(label=1.0, features=line.split(', ')[2:]))\
+                                   .map(lambda line: LabeledPoint(line.label, line.features))
+    
+        lg.info('%s features for training datas', train_data_rdd.count())
+        lg.info('Start to training model')
+        model = SVMWithSGD.train(train_data_rdd, iterations=iteration_model)
+        lg.info('Training model terminated')
+    
+    training_time = time.time()
+    training_duration = training_time - start_time
+    #Create testing rdd
+    test_data_rdd = common_rdd.filter(lambda line: int(line.split(', ')[1]) > nb_training_data)\
+                      .map(lambda line: Row(label=0.0, features=line.split(', ')[2:]) 
+                                           if line.split(', ')[0] == class1 
+                                           else Row(label=1.0, features=line.split(', ')[2:]))\
+                      .map(lambda row: LabeledPoint(row.label, row.features))
+    lg.info('%s features for test datas', test_data_rdd.count())
+    
+    # Evaluating the model on training data
+    predictions = test_data_rdd.map(lambda row: (row.label, float(model.predict(row.features))))
+    train_error = predictions.filter(lambda lp: lp[0] != lp[1]).count() \
+                                     / float(predictions.count())
+    lg.info('Test Error : %s', str(train_error))
+    end_time = time.time()
+    duration = end_time - start_time
+    lg.info('Duration %s', str(duration))
+    prediction_duration = end_time - training_time
+    # #Save and dump result on S3
+    result.append({"class1" : class1, "class2" : class2, "iteration_model" : iteration_model, 
+                   "nb_training_data" : nb_training_data, "total_duration" : duration,
+                   "train_duration" : training_duration, "predict_duration" : prediction_duration,
+                   "error" : train_error})
+    
+    s3object = s3.Object('oc-calculdistribues-sberton', result_file)
+    s3object.put(Body=(bytes(json.dumps(result, indent=2).encode('UTF-8'))))
+    
+    #Save model if not exists
+    if not is_model:
+        lg.info('Saving model at %s', model_file)
+        model.save(sc, model_pathname)
 
-                # add lable index on train and test datas - requirement for datalabeledpoint use  
-                label_index_model = label_indexer.fit(training_data) 
- 
-                training_data = label_index_model.transform(training_data)
-                test_data = label_index_model.transform(test_data)
-
-                #Create datalabledpoint for train & test datas
-                training_datalabeledpoint = create_labeledpoint(training_data)
-                test_datalabeledpoint = create_labeledpoint(test_data)
-
-                # Build the model
-                model = SVMWithSGD.train(training_datalabeledpoint, iterations=iteration_model)
-
-                # # # Evaluating the model on testing data
-                predictions = test_datalabeledpoint.map(lambda row: (row.label, float(model.predict(row.features))))
-            
-                train_error = predictions.filter(lambda lp: lp[0] != lp[1]).count() \
-                                                 / float(predictions.count())
-
-                lg.info('Test Error ================>%s', str(train_error))
-                lg.info('##################### Ending step %s #####################', step)
-                step += 1
-                result.append({"step" : step, "class1" : class1, "class2" : class2,
-                               "iteration_model" : iteration_model, 
-                               "split_percent" : split_percent, "error" :  train_error})
-
-        with open('result.json', 'w') as result_file:
-            json.dump(result, result_file)
-    finally:
-        lg.info('#################### Ending pet-classification ######################')
-        input("press ctrl+c to exit")
+    lg.info('#################### Ending pet-classification ######################')
 
 if __name__ == "__main__":
     main()
